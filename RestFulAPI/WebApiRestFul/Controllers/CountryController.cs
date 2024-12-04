@@ -17,7 +17,7 @@ namespace WebApiRestFul.Controllers
 
         }
 
-        [HttpGet("id:int")]
+        [HttpGet("id:int",Name="GetCountry")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -39,11 +39,20 @@ namespace WebApiRestFul.Controllers
         }
 
         [HttpPost]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public ActionResult<CountryDTO> CrearCountry([FromBody] CountryDTO countryDTO)
         {
+            if(!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            if (CountryStore.countryList.FirstOrDefault(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
+            {
+                ModelState.AddModelError("Existe","Ya Existe ese Nombre");
+            }
+
             if (countryDTO == null)
             {
                 return BadRequest(countryDTO);
@@ -56,7 +65,31 @@ namespace WebApiRestFul.Controllers
             countryDTO.Id = CountryStore.countryList.OrderByDescending(m => m.Id).FirstOrDefault().Id + 1 ;
             CountryStore.countryList.Add(countryDTO);
 
-            return Ok(countryDTO);
+            return CreatedAtRoute("GetCountry",new { id=countryDTO.Id},countryDTO);
+
+        }
+
+        [HttpDelete("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult EliminarCountry(int id)
+        {
+            if (id==0)
+            {
+                return BadRequest();
+            }
+            var country = CountryStore.countryList.FirstOrDefault(s=>s.Id==id);
+
+            if (country == null)
+            {
+
+                return NotFound();
+            }
+
+            CountryStore.countryList.Remove(country);
+
+            return NoContent();
 
         }
 
