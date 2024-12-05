@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using WebApiRestFul.Datos;
 using WebApiRestFul.Modelos.DTO;
@@ -9,10 +10,19 @@ namespace WebApiRestFul.Controllers
     [ApiController]
     public class CountryController : ControllerBase
     {
+        private readonly ILogger<CountryController> _logger;
+
+        public CountryController(ILogger<CountryController> logger)
+        {
+            _logger = logger;
+        }
+
+
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<IEnumerable<CountryDTO>> GetCountrys()
         {
+            _logger.LogInformation("Obtener los paises");
             return Ok (CountryStore.countryList);
 
         }
@@ -25,6 +35,7 @@ namespace WebApiRestFul.Controllers
         {
             if (id == 0)
             {
+                _logger.LogError("Error al obtener Country con Id " + id);
                 return BadRequest();
             }
             var country = CountryStore.countryList.FirstOrDefault(m => m.Id == id);
@@ -51,6 +62,7 @@ namespace WebApiRestFul.Controllers
             if (CountryStore.countryList.FirstOrDefault(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
             {
                 ModelState.AddModelError("Existe","Ya Existe ese Nombre");
+                return BadRequest(ModelState);
             }
 
             if (countryDTO == null)
@@ -69,7 +81,7 @@ namespace WebApiRestFul.Controllers
 
         }
 
-        [HttpDelete("{id:int}")]
+        [HttpDelete("id:int")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -92,6 +104,48 @@ namespace WebApiRestFul.Controllers
             return NoContent();
 
         }
+
+        [HttpPut("id:int")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult UpdateCountry(int id,[FromBody]CountryDTO countryDTO)
+        {
+            if (countryDTO==null || id!=countryDTO.Id)
+            {
+                return BadRequest();
+            }
+            var country = CountryStore.countryList.FirstOrDefault(d => d.Id == id);
+            country.Nombre=countryDTO.Nombre;
+            country.Habitantes = countryDTO.Habitantes;
+            country.Area = countryDTO.Area;
+
+
+            return NoContent();
+
+        }
+
+        [HttpPatch("id:int")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult UpdatePartialCountry(int id, JsonPatchDocument<CountryDTO> PatchCountryDTO)
+        {
+            if (PatchCountryDTO == null || id==0)
+            {
+                return BadRequest();
+            }
+            var country = CountryStore.countryList.FirstOrDefault(d => d.Id == id);
+
+            PatchCountryDTO.ApplyTo(country,ModelState);
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            return NoContent();
+
+        }
+
 
 
 
