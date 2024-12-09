@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebApiRestFul.Datos;
+using WebApiRestFul.Modelos;
 using WebApiRestFul.Modelos.DTO;
 
 namespace WebApiRestFul.Controllers
@@ -11,10 +13,12 @@ namespace WebApiRestFul.Controllers
     public class CountryController : ControllerBase
     {
         private readonly ILogger<CountryController> _logger;
+        private readonly ApplicationDbContext _db;
 
-        public CountryController(ILogger<CountryController> logger)
+        public CountryController(ILogger<CountryController> logger, ApplicationDbContext db)
         {
             _logger = logger;
+            _db = db;
         }
 
 
@@ -23,7 +27,7 @@ namespace WebApiRestFul.Controllers
         public ActionResult<IEnumerable<CountryDTO>> GetCountrys()
         {
             _logger.LogInformation("Obtener los paises");
-            return Ok (CountryStore.countryList);
+            return Ok (_db.Countries.ToList());
 
         }
 
@@ -38,7 +42,7 @@ namespace WebApiRestFul.Controllers
                 _logger.LogError("Error al obtener Country con Id " + id);
                 return BadRequest();
             }
-            var country = CountryStore.countryList.FirstOrDefault(m => m.Id == id);
+            var country = _db.Countries.FirstOrDefault(m => m.Id == id);
             if (country == null)
             {
                 return NotFound();
@@ -59,7 +63,7 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest(ModelState);
             }
-            if (CountryStore.countryList.FirstOrDefault(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
+            if (_db.Countries.FirstOrDefault(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
             {
                 ModelState.AddModelError("Existe","Ya Existe ese Nombre");
                 return BadRequest(ModelState);
@@ -74,8 +78,20 @@ namespace WebApiRestFul.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError);
 
             }
-            countryDTO.Id = CountryStore.countryList.OrderByDescending(m => m.Id).FirstOrDefault().Id + 1 ;
-            CountryStore.countryList.Add(countryDTO);
+
+            Country modelo = new()
+            {
+                Nombre = countryDTO.Nombre,
+                Detalle = countryDTO.Detalle,
+                ImagenUrl = countryDTO.ImagenUrl,
+                Habitantes = countryDTO.Habitantes,
+                Tarifa = countryDTO.Tarifa,
+                Area = countryDTO.Area
+            };
+
+            _db.Add(modelo);
+            _db.SaveChanges();
+
 
             return CreatedAtRoute("GetCountry",new { id=countryDTO.Id},countryDTO);
 
@@ -91,7 +107,7 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest();
             }
-            var country = CountryStore.countryList.FirstOrDefault(s=>s.Id==id);
+            var country = _db.Countries.FirstOrDefault(s=>s.Id==id);
 
             if (country == null)
             {
@@ -99,7 +115,8 @@ namespace WebApiRestFul.Controllers
                 return NotFound();
             }
 
-            CountryStore.countryList.Remove(country);
+            _db.Countries.Remove(country);
+            _db.SaveChanges();
 
             return NoContent();
 
@@ -114,11 +131,23 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest();
             }
-            var country = CountryStore.countryList.FirstOrDefault(d => d.Id == id);
-            country.Nombre=countryDTO.Nombre;
-            country.Habitantes = countryDTO.Habitantes;
-            country.Area = countryDTO.Area;
+            //var country = _db.Countries.FirstOrDefault(d => d.Id == id);
+            //country.Nombre=countryDTO.Nombre;
+            //country.Habitantes = countryDTO.Habitantes;
+            //country.Area = countryDTO.Area;
+            Country modelo = new()
+            {
+                Id = countryDTO.Id,
+                Nombre = countryDTO.Nombre,
+                Detalle = countryDTO.Detalle,
+                ImagenUrl = countryDTO.ImagenUrl,
+                Habitantes = countryDTO.Habitantes,
+                Tarifa = countryDTO.Tarifa,
+                Area = countryDTO.Area
+            };
 
+            _db.Update(modelo);
+            _db.SaveChanges();
 
             return NoContent();
 
@@ -133,15 +162,41 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest();
             }
-            var country = CountryStore.countryList.FirstOrDefault(d => d.Id == id);
+            var country = _db.Countries.AsNoTracking().FirstOrDefault(d => d.Id == id);
 
-            PatchCountryDTO.ApplyTo(country,ModelState);
+            CountryDTO countryDTO = new()
+            {
+                Id = country.Id,
+                Nombre=country.Nombre,
+                Detalle=country.Detalle,
+                ImagenUrl=country.ImagenUrl,
+                Habitantes=country.Habitantes,
+                Tarifa=country.Tarifa,
+                Area = country.Area
+            };
+
+            if (country == null) return BadRequest();
+
+            PatchCountryDTO.ApplyTo(countryDTO,ModelState);
 
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
+            Country modelo = new()
+            {
+                Id = countryDTO.Id,
+                Nombre = countryDTO.Nombre,
+                Detalle = countryDTO.Detalle,
+                ImagenUrl = countryDTO.ImagenUrl,
+                Habitantes = countryDTO.Habitantes,
+                Tarifa = countryDTO.Tarifa,
+                Area = countryDTO.Area
+            };
+
+            _db.Update(modelo);
+            _db.SaveChanges();
             return NoContent();
 
         }

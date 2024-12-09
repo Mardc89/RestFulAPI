@@ -9,6 +9,6 @@ namespace WebApiRestFul.Datos
         {
             
         }
-        public DbSet<Country> Countrys { get; set; }
+        public DbSet<Country> Countries { get; set; }
     }
 }

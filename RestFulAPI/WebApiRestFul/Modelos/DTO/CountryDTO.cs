@@ -18,6 +18,6 @@ namespace WebApiRestFul.Modelos.DTO
         public int Area { get; set; }
 
         public string ImagenUrl { get; set; }
-        public string Amenidad { get; set; }
+
     }
 }
