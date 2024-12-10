@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WebApiRestFul;
 using WebApiRestFul.Datos;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(option =>
 {
     option.UseSqlServer(builder.Configuration.GetConnectionString("cadenaSQL"));
 });
+
+builder.Services.AddAutoMapper(typeof(MappingConfing));
 
 var app = builder.Build();
 

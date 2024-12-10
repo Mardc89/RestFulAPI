@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,20 +15,23 @@ namespace WebApiRestFul.Controllers
     {
         private readonly ILogger<CountryController> _logger;
         private readonly ApplicationDbContext _db;
+        private readonly IMapper _mapper;
 
-        public CountryController(ILogger<CountryController> logger, ApplicationDbContext db)
+        public CountryController(ILogger<CountryController> logger, ApplicationDbContext db,IMapper mapper)
         {
             _logger = logger;
             _db = db;
+            _mapper = mapper;
         }
 
 
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public ActionResult<IEnumerable<CountryDTO>> GetCountrys()
+        public async Task<ActionResult<IEnumerable<CountryDTO>>> GetCountrys()
         {
             _logger.LogInformation("Obtener los paises");
-            return Ok (_db.Countries.ToList());
+            IEnumerable<Country> countryList = await _db.Countries.ToListAsync();
+            return Ok (_mapper.Map<IEnumerable<CountryDTO>>(countryList));
 
         }
 
@@ -35,21 +39,21 @@ namespace WebApiRestFul.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public ActionResult<CountryDTO> GetCountry(int id)
+        public async Task<ActionResult<CountryDTO>> GetCountry(int id)
         {
             if (id == 0)
             {
                 _logger.LogError("Error al obtener Country con Id " + id);
                 return BadRequest();
             }
-            var country = _db.Countries.FirstOrDefault(m => m.Id == id);
+            var country = await _db.Countries.FirstOrDefaultAsync(m => m.Id == id);
             if (country == null)
             {
                 return NotFound();
 
             }
 
-            return Ok(country);
+            return Ok(_mapper.Map<CountryDTO>(country));
 
         }
 
@@ -57,13 +61,13 @@ namespace WebApiRestFul.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public ActionResult<CountryDTO> CrearCountry([FromBody] CountryDTO countryDTO)
+        public async Task<ActionResult<CountryDTO>> CrearCountry([FromBody] CountryCreateDTO countryDTO)
         {
             if(!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-            if (_db.Countries.FirstOrDefault(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
+            if (await _db.Countries.FirstOrDefaultAsync(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
             {
                 ModelState.AddModelError("Existe","Ya Existe ese Nombre");
                 return BadRequest(ModelState);
@@ -73,27 +77,15 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest(countryDTO);
             }
-            if (countryDTO.Id>0)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError);
-
-            }
-
-            Country modelo = new()
-            {
-                Nombre = countryDTO.Nombre,
-                Detalle = countryDTO.Detalle,
-                ImagenUrl = countryDTO.ImagenUrl,
-                Habitantes = countryDTO.Habitantes,
-                Tarifa = countryDTO.Tarifa,
-                Area = countryDTO.Area
-            };
-
-            _db.Add(modelo);
-            _db.SaveChanges();
 
 
-            return CreatedAtRoute("GetCountry",new { id=countryDTO.Id},countryDTO);
+           Country modelo=_mapper.Map<Country>(countryDTO);
+
+            await _db.AddAsync(modelo);
+            await _db.SaveChangesAsync();
+
+
+            return CreatedAtRoute("GetCountry",new { id=modelo.Id},modelo);
 
         }
 
@@ -101,13 +93,13 @@ namespace WebApiRestFul.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public IActionResult EliminarCountry(int id)
+        public async Task<IActionResult> EliminarCountry(int id)
         {
             if (id==0)
             {
                 return BadRequest();
             }
-            var country = _db.Countries.FirstOrDefault(s=>s.Id==id);
+            var country = await _db.Countries.FirstOrDefaultAsync(s=>s.Id==id);
 
             if (country == null)
             {
@@ -116,7 +108,7 @@ namespace WebApiRestFul.Controllers
             }
 
             _db.Countries.Remove(country);
-            _db.SaveChanges();
+            await _db.SaveChangesAsync();
 
             return NoContent();
 
@@ -125,29 +117,18 @@ namespace WebApiRestFul.Controllers
         [HttpPut("id:int")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateCountry(int id,[FromBody]CountryDTO countryDTO)
+        public async Task<IActionResult> UpdateCountry(int id,[FromBody]CountryUpdateDTO countryDTO)
         {
             if (countryDTO==null || id!=countryDTO.Id)
             {
                 return BadRequest();
             }
-            //var country = _db.Countries.FirstOrDefault(d => d.Id == id);
-            //country.Nombre=countryDTO.Nombre;
-            //country.Habitantes = countryDTO.Habitantes;
-            //country.Area = countryDTO.Area;
-            Country modelo = new()
-            {
-                Id = countryDTO.Id,
-                Nombre = countryDTO.Nombre,
-                Detalle = countryDTO.Detalle,
-                ImagenUrl = countryDTO.ImagenUrl,
-                Habitantes = countryDTO.Habitantes,
-                Tarifa = countryDTO.Tarifa,
-                Area = countryDTO.Area
-            };
 
-            _db.Update(modelo);
-            _db.SaveChanges();
+            Country modelo = _mapper.Map<Country>(countryDTO);
+
+
+             _db.Update(modelo);
+            await _db.SaveChangesAsync();
 
             return NoContent();
 
@@ -156,24 +137,15 @@ namespace WebApiRestFul.Controllers
         [HttpPatch("id:int")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult UpdatePartialCountry(int id, JsonPatchDocument<CountryDTO> PatchCountryDTO)
+        public async Task<IActionResult> UpdatePartialCountry(int id, JsonPatchDocument<CountryUpdateDTO> PatchCountryDTO)
         {
             if (PatchCountryDTO == null || id==0)
             {
                 return BadRequest();
             }
-            var country = _db.Countries.AsNoTracking().FirstOrDefault(d => d.Id == id);
+            var country = await _db.Countries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
 
-            CountryDTO countryDTO = new()
-            {
-                Id = country.Id,
-                Nombre=country.Nombre,
-                Detalle=country.Detalle,
-                ImagenUrl=country.ImagenUrl,
-                Habitantes=country.Habitantes,
-                Tarifa=country.Tarifa,
-                Area = country.Area
-            };
+            CountryUpdateDTO countryDTO =_mapper.Map<CountryUpdateDTO>(country);
 
             if (country == null) return BadRequest();
 
@@ -184,19 +156,10 @@ namespace WebApiRestFul.Controllers
                 return BadRequest(ModelState);
             }
 
-            Country modelo = new()
-            {
-                Id = countryDTO.Id,
-                Nombre = countryDTO.Nombre,
-                Detalle = countryDTO.Detalle,
-                ImagenUrl = countryDTO.ImagenUrl,
-                Habitantes = countryDTO.Habitantes,
-                Tarifa = countryDTO.Tarifa,
-                Area = countryDTO.Area
-            };
+            Country modelo = _mapper.Map<Country>(countryDTO);
 
             _db.Update(modelo);
-            _db.SaveChanges();
+            await _db.SaveChangesAsync();
             return NoContent();
 
         }
