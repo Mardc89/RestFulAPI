@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using WebApiRestFul.Datos;
 using WebApiRestFul.Modelos;
 using WebApiRestFul.Modelos.DTO;
+using WebApiRestFul.Repositorio.IRepositorio;
 
 namespace WebApiRestFul.Controllers
 {
@@ -14,24 +16,38 @@ namespace WebApiRestFul.Controllers
     public class CountryController : ControllerBase
     {
         private readonly ILogger<CountryController> _logger;
-        private readonly ApplicationDbContext _db;
+        private readonly ICountryRepositorio _countryRepositorio;
         private readonly IMapper _mapper;
+        protected APIResponse _response;
 
-        public CountryController(ILogger<CountryController> logger, ApplicationDbContext db,IMapper mapper)
+        public CountryController(ILogger<CountryController> logger,ICountryRepositorio countryRepositorio,IMapper mapper)
         {
             _logger = logger;
-            _db = db;
+            _countryRepositorio = countryRepositorio;
             _mapper = mapper;
+            _response = new(); 
         }
 
 
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<ActionResult<IEnumerable<CountryDTO>>> GetCountrys()
+        public async Task<ActionResult<APIResponse>> GetCountry()
         {
-            _logger.LogInformation("Obtener los paises");
-            IEnumerable<Country> countryList = await _db.Countries.ToListAsync();
-            return Ok (_mapper.Map<IEnumerable<CountryDTO>>(countryList));
+            try
+            {
+                _logger.LogInformation("Obtener los paises");
+                IEnumerable<Country> countryList = await _countryRepositorio.ObtenerTodos();
+                _response.Resultado = _mapper.Map<IEnumerable<CountryDTO>>(countryList);
+                _response.statusCode=HttpStatusCode.OK;
+                return Ok (_response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsExistoso = false;
+                _response.ErrorMesages = new List<string>() { ex.ToString() };
+              
+            }
+            return _response;
 
         }
 
@@ -39,53 +55,82 @@ namespace WebApiRestFul.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<CountryDTO>> GetCountry(int id)
+        public async Task<ActionResult<APIResponse>> GetCountry(int id)
         {
-            if (id == 0)
+            try
             {
-                _logger.LogError("Error al obtener Country con Id " + id);
-                return BadRequest();
+                if (id == 0)
+                {
+                    _logger.LogError("Error al obtener Country con Id " + id);
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.IsExistoso = false;
+                    return BadRequest(_response);
+                }
+                var country = await _countryRepositorio.Obtener(m => m.Id == id);
+                if (country == null)
+                {
+                    _response.statusCode = HttpStatusCode.NotFound;
+                    _response.IsExistoso = false;
+                    return NotFound(_response);
+
+                }
+                _response.Resultado = _mapper.Map<CountryDTO>(country);
+                _response.statusCode = HttpStatusCode.OK;
+
+                return Ok(_response);
             }
-            var country = await _db.Countries.FirstOrDefaultAsync(m => m.Id == id);
-            if (country == null)
+            catch (Exception ex)
             {
-                return NotFound();
-
+                _response.IsExistoso=false;
+                _response.ErrorMesages = new List<string>() { ex.ToString() };
             }
-
-            return Ok(_mapper.Map<CountryDTO>(country));
-
+            return _response;
         }
 
         [HttpPost]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<CountryDTO>> CrearCountry([FromBody] CountryCreateDTO countryDTO)
+        public async Task<ActionResult<APIResponse>> CrearCountry([FromBody] CountryCreateDTO countryDTO)
         {
-            if(!ModelState.IsValid)
+            try
             {
-                return BadRequest(ModelState);
+                if(!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+                if (await _countryRepositorio.Obtener(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
+                {
+                    ModelState.AddModelError("Existe","Ya Existe ese Nombre");
+                    return BadRequest(ModelState);
+                }
+
+                if (countryDTO == null)
+                {
+                    return BadRequest(countryDTO);
+                }
+
+
+               Country modelo=_mapper.Map<Country>(countryDTO);
+
+                modelo.FechaCreacion = DateTime.Now;
+                modelo.FechaActualizacion = DateTime.Now;
+
+                await _countryRepositorio.Crear(modelo);
+                _response.Resultado= modelo;
+                _response.statusCode = HttpStatusCode.Created;
+    
+                return CreatedAtRoute("GetCountry",new { id=modelo.Id},_response);
             }
-            if (await _db.Countries.FirstOrDefaultAsync(m => m.Nombre.ToLower() == countryDTO.Nombre.ToLower()) != null)
+            catch (Exception ex)
             {
-                ModelState.AddModelError("Existe","Ya Existe ese Nombre");
-                return BadRequest(ModelState);
+                _response.IsExistoso = false;
+                _response.ErrorMesages = new List<string>() { ex.ToString() };
+
             }
 
-            if (countryDTO == null)
-            {
-                return BadRequest(countryDTO);
-            }
+            return _response;
 
-
-           Country modelo=_mapper.Map<Country>(countryDTO);
-
-            await _db.AddAsync(modelo);
-            await _db.SaveChangesAsync();
-
-
-            return CreatedAtRoute("GetCountry",new { id=modelo.Id},modelo);
 
         }
 
@@ -95,22 +140,35 @@ namespace WebApiRestFul.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> EliminarCountry(int id)
         {
-            if (id==0)
+            try
             {
-                return BadRequest();
-            }
-            var country = await _db.Countries.FirstOrDefaultAsync(s=>s.Id==id);
+                if (id==0)
+                {
+                    _response.IsExistoso = false;
+                    _response.statusCode= HttpStatusCode.BadRequest;
+                    return BadRequest(_response);
+                }
+                var country = await _countryRepositorio.Obtener(s=>s.Id==id);
 
-            if (country == null)
+                if (country == null)
+                {
+                    _response.IsExistoso = false;
+                    _response.statusCode = HttpStatusCode.NotFound;
+                    return NotFound(_response);
+                }
+
+                await _countryRepositorio.Remover(country);
+                _response.statusCode = HttpStatusCode.NoContent;
+                return Ok(_response);
+            }
+            catch (Exception ex)
             {
+                _response.IsExistoso = false;
+                _response.ErrorMesages = new List<string>() { ex.ToString() };
 
-                return NotFound();
             }
+            return BadRequest(_response);
 
-            _db.Countries.Remove(country);
-            await _db.SaveChangesAsync();
-
-            return NoContent();
 
         }
 
@@ -121,16 +179,19 @@ namespace WebApiRestFul.Controllers
         {
             if (countryDTO==null || id!=countryDTO.Id)
             {
-                return BadRequest();
+                _response.IsExistoso = false;
+                _response.statusCode=HttpStatusCode.BadRequest;
+                return BadRequest(_response);
             }
 
             Country modelo = _mapper.Map<Country>(countryDTO);
 
 
-             _db.Update(modelo);
-            await _db.SaveChangesAsync();
+            await _countryRepositorio.Actualizar(modelo);
+            _response.statusCode = HttpStatusCode.NoContent;
+   
 
-            return NoContent();
+            return Ok(_response);
 
         }
 
@@ -143,7 +204,7 @@ namespace WebApiRestFul.Controllers
             {
                 return BadRequest();
             }
-            var country = await _db.Countries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id);
+            var country = await _countryRepositorio.Obtener(d => d.Id == id,tracked:false);
 
             CountryUpdateDTO countryDTO =_mapper.Map<CountryUpdateDTO>(country);
 
@@ -158,9 +219,9 @@ namespace WebApiRestFul.Controllers
 
             Country modelo = _mapper.Map<Country>(countryDTO);
 
-            _db.Update(modelo);
-            await _db.SaveChangesAsync();
-            return NoContent();
+           await _countryRepositorio.Actualizar(modelo);
+            _response.statusCode=HttpStatusCode.NoContent;
+            return Ok(_response);
 
         }
 

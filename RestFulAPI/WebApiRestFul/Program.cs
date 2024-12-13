@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using WebApiRestFul;
 using WebApiRestFul.Datos;
+using WebApiRestFul.Repositorio;
+using WebApiRestFul.Repositorio.IRepositorio;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +20,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(option =>
 });
 
 builder.Services.AddAutoMapper(typeof(MappingConfing));
+
+builder.Services.AddScoped<ICountryRepositorio, CountryRepositorio>();
 
 var app = builder.Build();
 
